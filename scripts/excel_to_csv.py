@@ -19,7 +19,7 @@ def excel_to_csv(excel_path):
         # CSVの出力ファイル名を作成
         # 例: "sample.xlsx" の "Sheet1" → "sample_Sheet1.csv"
         # os.path.splitext(excel_path)[0] で拡張子を除いたファイル名を取得
-        csv_path = f"xlDif/{sheet_name}.csv"
+        csv_path = f"xlDif/{os.path.splitext(excel_path)[0]}/{sheet_name}.csv"
 
         # DataFrameをCSVとして保存
         # index=False により、行番号は出力せずデータのみ書き出す
