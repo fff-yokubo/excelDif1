@@ -1,128 +1,178 @@
+## 概要
 
+このプロジェクトは **Git で Excel ファイル（.xlsx）の変更履歴を管理しやすくする仕組み** です。
+Excel はバイナリ形式のため Git で差分管理が困難ですが、コミット時に Excel をシートごとの **CSV (テキストファイル)** に自動変換し、CSV を差分管理対象にします。
 
-# Excel Diff with Git
-
-Excelファイル（`.xlsx`）をGitで効率的に管理するための仕組みです。
-通常、Excelはバイナリ形式のため差分が確認できませんが、本プロジェクトでは **コミット時に自動でCSVへ変換** し、
-Gitのテキスト差分として変更点を可視化できるようにしています。
-
----
-
-## 機能概要
-
-- Gitの **pre-commitフック** により、Excelファイルが変更された場合に自動的にCSVへ変換
-- 変換処理は `scripts/excel_to_csv.py` によって実行
-- 生成されたCSVファイルはExcelと同時にGitへコミットされる
-- CSV形式なので `git diff` でデータの変更点を直接確認可能
+これにより、Excel の更新内容を Git 上で「テキスト差分」として確認可能になります。
 
 ---
 
-## ディレクトリ構成
+## 構成
 
 ```
-
-.
-├── .git/hooks/pre-commit        # コミット前に実行されるフックスクリプト
-├── scripts/
-│   └── excel\_to\_csv.py          # ExcelをシートごとにCSVへ変換するスクリプト
-└── README.md                    # 本ドキュメント
-
-````
+.git/hooks/pre-commit     # Git フック（Excel を自動で CSV 化）
+scripts/excel_to_csv.py   # Excel → CSV 変換用スクリプト
+xlDif/                    # 変換後の CSV ファイル保存先
+```
 
 ---
 
-## pre-commit フックスクリプト
+## 動作の流れ
 
-`.git/hooks/pre-commit` に以下を設定してください。
-Excelファイルがステージングされていた場合、自動でCSVへ変換されます。
+1. **Excel を Git に追加 (`git add`)**
+2. **コミット直前に pre-commit フックが発動**
+
+   * 変更された `.xlsx` ファイルを検出
+   * 出力先フォルダ `xlDif/<Excelファイル名>/` を作成
+   * Python スクリプトを呼び出し、CSV に変換
+   * 生成された CSV を Git に自動で追加
+3. **コミット完了時に Excel と CSV 両方が Git に記録される**
+4. **差分確認 (`git diff`) で CSV を比較できる**
+
+---
+
+## pre-commit フック
+
+`.git/hooks/pre-commit` に配置するシェルスクリプトです。
 
 ```bash
 #!/bin/bash
 
-# Excelファイルが変更されていたらCSVに変換
-for file in $(git diff --cached --name-only | grep '.xlsx$'); do
+# pre-commit hook: Excelファイルが変更されていたらCSVに変換してステージに追加
+for file in $(git diff --cached --name-only | grep '\.xlsx$'); do
     echo "Converting $file to CSV..."
+
+    # 出力先のディレクトリを作成 (xlDif/<元ファイル名>/)
+    outdir="xlDif/${file%.xlsx}"
+    mkdir -p "$outdir"
+
+    # Python スクリプトを実行して CSV に変換
     python scripts/excel_to_csv.py "$file"
-    git add "${file%.xlsx}"*.csv
+
+    # 生成されたCSVを Git に追加
+    git add "$outdir"/*.csv
 done
-````
-
-### 実行権限の付与
-
-```bash
-chmod +x .git/hooks/pre-commit
 ```
+
+### 処理詳細
+
+* `git diff --cached --name-only` : コミット予定のファイル一覧を取得
+* `grep '\.xlsx$'` : Excel ファイル（拡張子 .xlsx）のみ抽出
+* `mkdir -p` : 出力先ディレクトリを作成（存在してもエラーにならない）
+* Python スクリプトを呼び出し、対象ファイルを CSV 化
+* `git add` : 生成された CSV をコミット対象に追加
 
 ---
 
-## Excel → CSV 変換スクリプト
+## Python スクリプト
 
-`scripts/excel_to_csv.py` では、ExcelファイルをシートごとにCSVファイルへ変換します。
+`scripts/excel_to_csv.py`
 
 ```python
 import pandas as pd
 import sys
 import os
 
+# ----------------------------------------------------------
+# ExcelファイルをシートごとにCSVファイルへ変換する関数
+#   引数:
+#       excel_path : 変換対象のExcelファイルパス
+# ----------------------------------------------------------
 def excel_to_csv(excel_path):
-    xls = pd.ExcelFile(excel_path)
-    for sheet_name in xls.sheet_names:
-        df = pd.read_excel(excel_path, sheet_name=sheet_name)
-        csv_path = f"{os.path.splitext(excel_path)[0]}_{sheet_name}.csv"
-        df.to_csv(csv_path, index=False)
+    # Excelファイル名 (拡張子除去)
+    base_name = os.path.splitext(excel_path)[0]
+    # 出力ディレクトリ (xlDif/<ファイルパス>)
+    outdir = os.path.join("xlDif", base_name)
+    os.makedirs(outdir, exist_ok=True)
 
+    # Excelファイルを開き、シートの情報を保持するオブジェクトを作成
+    xls = pd.ExcelFile(excel_path)
+
+    # Excelファイル内の全てのシート名を順番に処理
+    for sheet_name in xls.sheet_names:
+        # 現在のシートをDataFrameとして読み込み
+        df = pd.read_excel(excel_path, sheet_name=sheet_name)
+
+        # CSVの出力ファイル名を作成
+        # 例: "sample.xlsx" の "Sheet1" → "xlDif/sample/Sheet1.csv"
+        csv_path = os.path.join(outdir, f"{sheet_name}.csv")
+
+        # DataFrameをCSVとして保存
+        # index=False により、行番号は出力せずデータのみ書き出す
+        df.to_csv(csv_path, sep="\t", index=False)
+        print(f"convert {sheet_name}.csv done")
+
+# ----------------------------------------------------------
+# スクリプトを直接実行した場合の処理
+# ----------------------------------------------------------
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python excel_to_csv.py <excel_file>")
+        sys.exit(1)
+
     excel_file = sys.argv[1]
     excel_to_csv(excel_file)
 ```
 
-### 処理の流れ
+### 処理詳細
 
-1. Excelファイルを読み込み、含まれるすべてのシートを取得
-2. 各シートをDataFrameに変換（pandasを利用）
-3. シートごとに `元ファイル名_シート名.csv` の形式で保存
+1. **Excel のパスを受け取り** → `xlDif/<Excelファイル名>/` に出力フォルダを作成
+2. **全シートを走査**
+3. **シートごとに DataFrame として読み込み**
+4. **シート名.csv** として保存
 
-   * 例: `report.xlsx` の `Sheet1` → `report_Sheet1.csv`
-4. pre-commitフック経由で呼び出され、CSVがコミット対象に追加される
+   * 区切り文字: タブ (`\t`)
+   * 行番号は出力せず（`index=False`）
+5. 処理結果を標準出力に表示
 
 ---
 
-## 使い方
+## セットアップ
 
-1. Excelファイルをリポジトリに追加または変更する
+### 1. 依存ライブラリのインストール
 
-   ```bash
-   git add sample.xlsx
-   ```
+```bash
+pip install pandas openpyxl
+```
 
-2. コミットを実行すると、フックが動作してCSVファイルが生成される
+### 2. pre-commit フックの設置
 
-   ```bash
-   git commit -m "Update Excel data"
-   ```
+```bash
+cp pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
 
-3. Gitには以下が登録される
+---
 
-   * 元のExcelファイル
-   * シートごとに出力されたCSVファイル
+## 利用方法
+
+1. Excel ファイルを編集し、Git に追加
+
+```bash
+git add sample.xlsx
+git commit -m "update excel"
+```
+
+2. コミット時に自動で CSV が生成される
+
+```
+xlDif/sample/Sheet1.csv
+xlDif/sample/Sheet2.csv
+```
+
+3. 差分確認
+
+```bash
+git diff HEAD^ HEAD xlDif/sample/Sheet1.csv
+```
+
+→ Excel の変更内容をテキストとして確認可能
 
 ---
 
 ## メリット
 
-* **Excelのまま残す** → ユーザーは通常通りExcelで編集可能
-* **CSVで差分確認** → Git上ではテキスト形式で変更点を追跡可能
-* **レビューが容易** → Pull Requestなどで変更内容を確認しやすい
+* **Excel の差分を Git 上で確認可能**
+* **複数人での共同開発・管理が容易**
+* **バイナリ比較を避け、レビュー効率が向上**
 
----
-
-## 必要な環境
-
-* Python 3.x
-* ライブラリ: pandas, openpyxl
-
-インストール例:
-
-```bash
-pip install pandas openpyxl
-```
