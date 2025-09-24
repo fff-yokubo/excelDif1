@@ -1,0 +1,81 @@
+import pandas as pd
+import os
+import string
+
+def colnum_to_excel(col_idx):
+    """0始まりの列番号をExcel列名に変換"""
+    result = ''
+    while col_idx >= 0:
+        result = chr(col_idx % 26 + ord('A')) + result
+        col_idx = col_idx // 26 - 1
+    return result
+
+def excel_diff_to_markdown(file1, file2, output_md="diff_report.md"):
+    """
+    2つのExcelファイルの差分をMarkdown形式でレポートとして出力
+    """
+    md_lines = [f"# Excel差分レポート\n\n比較対象: `{file1}` vs `{file2}`\n"]
+
+    # ファイル存在チェック
+    if not os.path.exists(file1):
+        md_lines.append(f"* ファイルが存在しません: {file1}\n")
+        with open(output_md, "w", encoding="utf-8") as f:
+            f.write("\n".join(md_lines))
+        return
+    if not os.path.exists(file2):
+        md_lines.append(f"* ファイルが存在しません: {file2}\n")
+        with open(output_md, "w", encoding="utf-8") as f:
+            f.write("\n".join(md_lines))
+        return
+
+    xls1 = pd.ExcelFile(file1)
+    xls2 = pd.ExcelFile(file2)
+
+    sheets1 = set(xls1.sheet_names)
+    sheets2 = set(xls2.sheet_names)
+    all_sheets = sheets1.union(sheets2)
+
+    for sheet in all_sheets:
+        md_lines.append(f"## シート: {sheet}\n")
+
+        if sheet not in sheets1:
+            md_lines.append(f"* `{sheet}` は `{file1}` に存在しません（新規シート）\n\n")
+            continue
+        if sheet not in sheets2:
+            md_lines.append(f"* `{sheet}` は `{file2}` に存在しません（削除されたシート）\n\n")
+            continue
+
+        df1 = pd.read_excel(file1, sheet_name=sheet, dtype=str).fillna('')
+        df2 = pd.read_excel(file2, sheet_name=sheet, dtype=str).fillna('')
+
+        max_rows = max(len(df1), len(df2))
+        max_cols = max(df1.shape[1], df2.shape[1])
+
+        df1 = df1.reindex(index=range(max_rows), columns=range(max_cols), fill_value='')
+        df2 = df2.reindex(index=range(max_rows), columns=range(max_cols), fill_value='')
+
+        diff_found = False
+        md_lines.append("| セル | ファイル1 | ファイル2 |")
+        md_lines.append("|---|---|---|")
+
+        for r in range(max_rows):
+            for c in range(max_cols):
+                val1 = df1.iat[r, c]
+                val2 = df2.iat[r, c]
+                if val1 != val2:
+                    diff_found = True
+                    cell_ref = f"{colnum_to_excel(c)}{r+1}"
+                    md_lines.append(f"| {cell_ref} | {val1} | {val2} |")
+
+        if not diff_found:
+            md_lines.append("* 変更なし *\n")
+        md_lines.append("\n")
+
+    with open(output_md, "w", encoding="utf-8") as f:
+        f.write("\n".join(md_lines))
+
+    print(f"Markdown差分レポートを作成しました: {output_md}")
+
+
+# 使用例
+excel_diff_to_markdown("file1.xlsx", "file2.xlsx")
