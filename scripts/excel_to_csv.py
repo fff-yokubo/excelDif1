@@ -8,28 +8,43 @@ import os
 #       excel_path : 変換対象のExcelファイルパス
 # ----------------------------------------------------------
 def excel_to_csv(excel_path):
+    # ファイル存在チェック
+    if not os.path.exists(excel_path):
+        print(f"[WARN] 指定されたファイルが存在しません: {excel_path}")
+        return  # 処理を中断して終了
+
     # Excelファイル名 (拡張子除去)
-    base_name = os.path.splitext(excel_path)[0]
-    # 出力ディレクトリ (xlDif/<ファイルパス>)
+    base_name = os.path.splitext(os.path.basename(excel_path))[0]
+    # 出力ディレクトリ (xlDif/<ファイル名>/)
     outdir = os.path.join("xlDif", base_name)
     os.makedirs(outdir, exist_ok=True)
 
-    # Excelファイルを開き、シートの情報を保持するオブジェクトを作成
-    xls = pd.ExcelFile(excel_path)
+    try:
+        # Excelファイルを開き、シートの情報を保持するオブジェクトを作成
+        xls = pd.ExcelFile(excel_path)
+    except Exception as e:
+        print(f"[ERROR] Excelファイルを開けませんでした: {excel_path}")
+        print(f"詳細: {e}")
+        return
 
     # Excelファイル内の全てのシート名を順番に処理
     for sheet_name in xls.sheet_names:
-        # 現在のシートをDataFrameとして読み込み
-        df = pd.read_excel(excel_path, sheet_name=sheet_name)
+        try:
+            # 現在のシートをDataFrameとして読み込み
+            df = pd.read_excel(excel_path, sheet_name=sheet_name)
 
-        # CSVの出力ファイル名を作成
-        # 例: "sample.xlsx" の "Sheet1" → "xlDif/sample/Sheet1.csv"
-        csv_path = os.path.join(outdir, f"{sheet_name}.csv")
+            # CSVの出力ファイル名を作成
+            csv_path = os.path.join(outdir, f"{sheet_name}.csv")
 
-        # DataFrameをCSVとして保存
-        # index=False により、行番号は出力せずデータのみ書き出す
-        df.to_csv(csv_path, sep="\t", index=False)
-        print(f"convert {sheet_name}.csv done")
+            # DataFrameをCSVとして保存
+            df.to_csv(csv_path, sep="\t", index=False)
+
+            # 出力した行数（ヘッダを含めないデータ行数）
+            row_count = len(df)
+
+            print(f"[INFO] {sheet_name}.csv を出力しました (行数: {row_count})")
+        except Exception as e:
+            print(f"[WARN] シート {sheet_name} の処理でエラーが発生しました: {e}")
 
 # ----------------------------------------------------------
 # スクリプトを直接実行した場合の処理
@@ -37,7 +52,7 @@ def excel_to_csv(excel_path):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python excel_to_csv.py <excel_file>")
-        sys.exit(1)
+        sys.exit(0)  # 引数なしでも異常終了しないように変更
 
     excel_file = sys.argv[1]
     excel_to_csv(excel_file)
