@@ -10,8 +10,8 @@ import os
 def excel_to_csv(excel_path):
     # ファイル存在チェック
     if not os.path.exists(excel_path):
-        print(f"[WARN] 指定されたファイルが存在しません: {excel_path}")
-        return  # 処理を中断して終了
+        print(f"[WARN] File does not exist: {excel_path}")
+        return
 
     # Excelファイル名 (拡張子除去)
     base_name = os.path.splitext(os.path.basename(excel_path))[0]
@@ -23,8 +23,8 @@ def excel_to_csv(excel_path):
         # Excelファイルを開き、シートの情報を保持するオブジェクトを作成
         xls = pd.ExcelFile(excel_path)
     except Exception as e:
-        print(f"[ERROR] Excelファイルを開けませんでした: {excel_path}")
-        print(f"詳細: {e}")
+        print(f"[ERROR] Could not open Excel file: {excel_path}")
+        print(f"Details: {e}")
         return
 
     # Excelファイル内の全てのシート名を順番に処理
@@ -42,9 +42,9 @@ def excel_to_csv(excel_path):
             # 出力した行数（ヘッダを含めないデータ行数）
             row_count = len(df)
 
-            print(f"[INFO] {sheet_name}.csv を出力しました (行数: {row_count})")
+            print(f"[INFO] {sheet_name}.csv has been exported (rows: {row_count})")
         except Exception as e:
-            print(f"[WARN] シート {sheet_name} の処理でエラーが発生しました: {e}")
+            print(f"[WARN] Error occurred while processing sheet {sheet_name}: {e}")
 
 # ----------------------------------------------------------
 # スクリプトを直接実行した場合の処理
@@ -52,7 +52,7 @@ def excel_to_csv(excel_path):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python excel_to_csv.py <excel_file>")
-        sys.exit(0)  # 引数なしでも異常終了しないように変更
+        sys.exit(0)
 
     excel_file = sys.argv[1]
     excel_to_csv(excel_file)
