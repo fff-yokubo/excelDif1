@@ -100,15 +100,24 @@ xlDif/
 
 ```bash
 #!/bin/bash
+# coding: utf-8
+
+# 日本語を正しく扱うための環境設定
+export LANG=ja_JP.UTF-8
+export LC_ALL=ja_JP.UTF-8
 
 # pre-commit フック: ステージされた Excel ファイルを検出し、CSV に変換してステージに追加する
-for file in $(git diff --cached --name-only | grep '\.xlsx$'); do
+git diff --cached --name-only --diff-filter=ACM -z | \
+grep -z '\.xlsx$' | while IFS= read -r -d '' file; do
     outdir="xlDif/${file%.xlsx}"
     mkdir -p "$outdir"
 
+    echo "[INFO] Processing Excel file: $file"
+
+    # Python スクリプトを実行して Excel → CSV に変換
     python scripts/excel_to_csv.py "$file"
 
-    if compgen -G "$outdir/*.csv" > /dev/null; then
+    if compgen -G "$outdir"/*.csv > /dev/null; then
         git add "$outdir"/*.csv
         echo "[INFO] CSV files added for $file"
 
@@ -125,6 +134,9 @@ for file in $(git diff --cached --name-only | grep '\.xlsx$'); do
         rm -rf "$outdir"
     fi
 done
+
+
+
 ```
 
 ---
