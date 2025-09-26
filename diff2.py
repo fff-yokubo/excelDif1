@@ -32,9 +32,11 @@ def load_excel_as_dict(path):
         sheets_dict[sheet] = values
     return sheets_dict
 
-def compare_excels(file1, file2, output_md="diff_report.md"):
+def compare_excels(file1, file2, output_md="diff_report.md", threshold=50):
     """
     2つのExcelファイルを比較して差分をMarkdown形式で出力する
+    - セル値が threshold 文字を超える場合は表ではリンクのみ
+    - 実際の長文は表の下に別枠表示
     """
     print(f"[INFO] ファイル比較開始: {file1} vs {file2}")
 
@@ -80,6 +82,8 @@ def compare_excels(file1, file2, output_md="diff_report.md"):
         vals2 = data2[sheet]
 
         changed = []
+        long_text_blocks = []  # 長文セルの別枠差分
+
         all_cells = set(vals1.keys()) | set(vals2.keys())
         for pos in sorted(all_cells):
             v1 = vals1.get(pos, None)
@@ -87,19 +91,48 @@ def compare_excels(file1, file2, output_md="diff_report.md"):
             if v1 != v2:  # 値に差がある場合のみ記録
                 col = colnum_string(pos[1])
                 cell = f"{col}{pos[0]}"
-                changed.append((cell, v1, v2))
 
-        # 差分がある場合は表形式で出力
+                v1_display = v1 if v1 else ""
+                v2_display = v2 if v2 else ""
+
+                # 長文ならリンクに変換して別枠保存
+                if (v1 and len(v1) > threshold) or (v2 and len(v2) > threshold):
+                    anchor = f"{sheet}_{cell}".replace(" ", "_")
+                    if v1 and len(v1) > threshold:
+                        v1_display = f"[旧値はこちら](#{anchor}-old)"
+                    if v2 and len(v2) > threshold:
+                        v2_display = f"[新値はこちら](#{anchor}-new)"
+
+                    long_text_blocks.append((sheet, cell, v1, v2, anchor))
+                    print(f"[LONG] {sheet} {cell}: 長文差分あり")
+
+                changed.append((cell, v1_display, v2_display))
+                print(f"[DIFF] {sheet} {cell}: 差分あり")
+
+        # 差分を表にまとめて出力
         if changed:
             report_lines.append("| セル | 旧値 | 新値 |")
             report_lines.append("|------|------|------|")
             for cell, v1, v2 in changed:
-                report_lines.append(f"| {cell} | {v1 if v1 else ''} | {v2 if v2 else ''} |")
-                print(f"[DIFF] {sheet} {cell}: '{v1}' → '{v2}'")
+                report_lines.append(f"| {cell} | {v1} | {v2} |")
             report_lines.append("")
+
         else:
             report_lines.append("変更なし\n")
             print(f"[INFO] 差分なし: {sheet}")
+
+        # 長文セルの内容を別枠に出力
+        for sheet_name, cell, v1, v2, anchor in long_text_blocks:
+            if v1 and len(v1) > threshold:
+                report_lines.append(f"### <a name=\"{anchor}-old\"></a>{sheet_name} {cell} の旧値\n")
+                report_lines.append("```")
+                report_lines.append(v1)
+                report_lines.append("```\n")
+            if v2 and len(v2) > threshold:
+                report_lines.append(f"### <a name=\"{anchor}-new\"></a>{sheet_name} {cell} の新値\n")
+                report_lines.append("```")
+                report_lines.append(v2)
+                report_lines.append("```\n")
 
     # Markdownファイルに書き出し
     with open(output_md, "w", encoding="utf-8") as f:
@@ -114,7 +147,8 @@ if __name__ == "__main__":
     parser.add_argument("file1", help="比較元のExcelファイル")
     parser.add_argument("file2", help="比較先のExcelファイル")
     parser.add_argument("-o", "--output", default="diff_report.md", help="出力Markdownファイル名 (デフォルト: diff_report.md)")
+    parser.add_argument("-t", "--threshold", type=int, default=50, help="長文セルを別枠表示する文字数閾値 (デフォルト: 50)")
     args = parser.parse_args()
 
     # 差分比較を実行
-    compare_excels(args.file1, args.file2, args.output)
+    compare_excels(args.file1, args.file2, args.output, args.threshold)
