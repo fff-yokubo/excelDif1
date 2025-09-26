@@ -6,7 +6,7 @@ from openpyxl import load_workbook
 def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
     """
     Excelファイル同士を比較し、セルごとの差分をMarkdown形式で出力する。
-    - 長文セル（50文字以上）は別枠に出力
+    - 長文セル（30文字以上）または改行を含むセルは別枠に出力
     - 差分表には「旧値はこちら」「新値はこちら」のリンクを置く
     - VSCode Markdownプレビューで利用可能な見出しアンカーを使用
     """
@@ -95,18 +95,24 @@ def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
                         coord = f"{old_ws.cell(r, c).coordinate}"
                         print(f"[DEBUG] Difference found at {sheet_name} {coord}")
 
-                        # 長文（50文字以上）の場合は別枠出力とする
-                        if (cell and len(str(cell)) > 50) or (new_cell and len(str(new_cell)) > 50):
-                            # 表には見出しリンクを設置
+                        # --- 長文セル or 改行を含むセルを判定 ---
+                        def is_long_or_multiline(val):
+                            if val is None:
+                                return False
+                            text = str(val)
+                            return len(text) > 30 or ("\n" in text) or ("\r" in text)
+
+                        if is_long_or_multiline(cell) or is_long_or_multiline(new_cell):
+                            # 表にはリンクを設置
                             diff_table.append([
                                 coord,
                                 f"[旧値はこちら](#{sheet_name.lower()}-{coord.lower()}-旧値)",
                                 f"[新値はこちら](#{sheet_name.lower()}-{coord.lower()}-新値)"
                             ])
-                            # 別枠用にデータを保存
+                            # 別枠用に保存
                             long_texts.append((sheet_name, coord, cell, new_cell))
                         else:
-                            # 通常の短い文字列はそのまま表に記載
+                            # 短文は直接テーブルに出力
                             diff_table.append([coord, str(cell), str(new_cell)])
 
             # ----------------------------------------------------
@@ -125,7 +131,6 @@ def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
             # 長文セルの別枠出力
             # ----------------------------------------------------
             for (sheet, coord, old_val, new_val) in long_texts:
-                # 「差分表へ戻る」はシート見出し(## シート: SheetName)をターゲットにする
                 f.write(f"### {sheet} {coord} ([差分表へ戻る](#シート-{sheet.lower()}))\n")
                 if old_val is not None:
                     f.write(f"#### {sheet} {coord} 旧値\n")
