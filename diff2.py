@@ -35,8 +35,8 @@ def load_excel_as_dict(path):
 def compare_excels(file1, file2, output_md="diff_report.md", threshold=50):
     """
     2つのExcelファイルを比較して差分をMarkdown形式で出力する
-    - セル値が threshold 文字を超える場合は表ではリンクのみ
-    - 実際の長文は表の下に別枠表示
+    - セル値が threshold 文字を超える場合は表ではリンクに置換
+    - 実際の長文はセルごとにレベル3見出しで別枠出力
     """
     print(f"[INFO] ファイル比較開始: {file1} vs {file2}")
 
@@ -99,9 +99,9 @@ def compare_excels(file1, file2, output_md="diff_report.md", threshold=50):
                 if (v1 and len(v1) > threshold) or (v2 and len(v2) > threshold):
                     anchor = f"{sheet}_{cell}".replace(" ", "_")
                     if v1 and len(v1) > threshold:
-                        v1_display = f"[旧値はこちら](#{anchor}-old)"
+                        v1_display = f"[旧値はこちら](#{anchor})"
                     if v2 and len(v2) > threshold:
-                        v2_display = f"[新値はこちら](#{anchor}-new)"
+                        v2_display = f"[新値はこちら](#{anchor})"
 
                     long_text_blocks.append((sheet, cell, v1, v2, anchor))
                     print(f"[LONG] {sheet} {cell}: 長文差分あり")
@@ -121,18 +121,20 @@ def compare_excels(file1, file2, output_md="diff_report.md", threshold=50):
             report_lines.append("変更なし\n")
             print(f"[INFO] 差分なし: {sheet}")
 
-        # 長文セルの内容を別枠に出力
+        # 長文セルの内容を別枠に出力 (セルごとにレベル3見出し)
         for sheet_name, cell, v1, v2, anchor in long_text_blocks:
+            report_lines.append(f"### <a name=\"{anchor}\"></a>{sheet_name} {cell}\n")
             if v1 and len(v1) > threshold:
-                report_lines.append(f"### <a name=\"{anchor}-old\"></a>{sheet_name} {cell} の旧値\n")
+                report_lines.append("**旧値:**")
                 report_lines.append("```")
                 report_lines.append(v1)
-                report_lines.append("```\n")
+                report_lines.append("```")
             if v2 and len(v2) > threshold:
-                report_lines.append(f"### <a name=\"{anchor}-new\"></a>{sheet_name} {cell} の新値\n")
+                report_lines.append("**新値:**")
                 report_lines.append("```")
                 report_lines.append(v2)
-                report_lines.append("```\n")
+                report_lines.append("```")
+            report_lines.append("")
 
     # Markdownファイルに書き出し
     with open(output_md, "w", encoding="utf-8") as f:
