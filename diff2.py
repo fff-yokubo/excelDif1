@@ -6,8 +6,9 @@ from openpyxl import load_workbook
 def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
     """
     Excelファイル同士を比較し、セルごとの差分をMarkdown形式で出力する。
-    - 長文セルの場合は別枠に「旧値」「新値」を表示
-    - 各セルの別枠出力部分の見出しには「差分表へ戻る」リンクを追加
+    - 長文セル（50文字以上）は別枠に出力
+    - 差分表には「旧値はこちら」「新値はこちら」のリンクを置く
+    - VSCode Markdownプレビューで利用可能な見出しアンカーを使用
     """
 
     print(f"[INFO] Start comparison: {old_file} vs {new_file}")
@@ -96,11 +97,11 @@ def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
 
                         # 長文（50文字以上）の場合は別枠出力とする
                         if (cell and len(str(cell)) > 50) or (new_cell and len(str(new_cell)) > 50):
-                            # 表にはアンカーリンクだけを置く
+                            # 表には見出しリンクを設置
                             diff_table.append([
                                 coord,
-                                f"[旧値はこちら](#{sheet_name}_{coord}_old)",
-                                f"[新値はこちら](#{sheet_name}_{coord}_new)"
+                                f"[旧値はこちら](#{sheet_name.lower()}-{coord.lower()}-旧値)",
+                                f"[新値はこちら](#{sheet_name.lower()}-{coord.lower()}-新値)"
                             ])
                             # 別枠用にデータを保存
                             long_texts.append((sheet_name, coord, cell, new_cell))
@@ -112,8 +113,6 @@ def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
             # 差分表の出力
             # ----------------------------------------------------
             if diff_table:
-                # 差分表に戻るためのアンカーを設置
-                f.write(f"<a name=\"{sheet_name}_diff_table\"></a>\n\n")
                 f.write("| セル | 旧値 | 新値 |\n")
                 f.write("|------|------|------|\n")
                 for row in diff_table:
@@ -126,13 +125,13 @@ def excel_diff_report(old_file, new_file, output_md="diff_report.md"):
             # 長文セルの別枠出力
             # ----------------------------------------------------
             for (sheet, coord, old_val, new_val) in long_texts:
-                # 見出しに「差分表へ戻る」リンクを追加
-                f.write(f"### {sheet} {coord} ([差分表へ戻る](#{sheet}_diff_table))\n")
+                # 「差分表へ戻る」はシート見出し(## シート: SheetName)をターゲットにする
+                f.write(f"### {sheet} {coord} ([差分表へ戻る](#シート-{sheet.lower()}))\n")
                 if old_val is not None:
-                    f.write(f"#### <a name=\"{sheet}_{coord}_old\"></a>旧値\n")
+                    f.write(f"#### {sheet} {coord} 旧値\n")
                     f.write("```\n" + str(old_val) + "\n```\n\n")
                 if new_val is not None:
-                    f.write(f"#### <a name=\"{sheet}_{coord}_new\"></a>新値\n")
+                    f.write(f"#### {sheet} {coord} 新値\n")
                     f.write("```\n" + str(new_val) + "\n```\n\n")
 
     print(f"[INFO] Diff report generated: {output_md}")
